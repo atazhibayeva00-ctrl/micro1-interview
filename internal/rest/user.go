@@ -23,7 +23,8 @@ func NewHandler(client *gitea.Client, publicURL string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", h.health)
 	mux.HandleFunc("GET /api/v3/user", h.currentUser)
-	const repoRoute = "GET /api/v3/repos/{owner}/{repo}"
+	const repoPrefix = "/api/v3/repos/{owner}/{repo}"
+	const repoRoute = "GET " + repoPrefix
 	mux.HandleFunc(repoRoute, h.repository)
 	mux.HandleFunc(repoRoute+"/branches", h.branches)
 	mux.HandleFunc(repoRoute+"/git/ref/{ref...}", h.gitRef)
@@ -31,6 +32,9 @@ func NewHandler(client *gitea.Client, publicURL string) http.Handler {
 	mux.HandleFunc(repoRoute+"/contents", h.contents)
 	mux.HandleFunc(repoRoute+"/contents/{path...}", h.contents)
 	mux.HandleFunc("GET /raw/{owner}/{repo}/{sha}/{path...}", h.raw)
+	mux.HandleFunc("GET "+repoPrefix+"/git/blobs/{sha}", h.blob)
+	mux.HandleFunc("POST "+repoPrefix+"/git/refs", h.createRef)
+	mux.HandleFunc("PUT "+repoPrefix+"/contents/{path...}", h.putContents)
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "Not Found")
 	})
