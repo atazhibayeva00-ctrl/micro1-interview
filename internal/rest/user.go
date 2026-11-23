@@ -1,0 +1,123 @@
+// Package rest serves the GitHub-compatible REST API.
+package rest
+
+import (
+	"errors"
+	"net/http"
+	"time"
+
+	"micro1-interview/internal/gitea"
+)
+
+// Handler serves GitHub-format routes backed by Gitea.
+type Handler struct {
+	gitea *gitea.Client
+}
+
+// NewHandler returns the gateway's HTTP routes.
+func NewHandler(client *gitea.Client) http.Handler {
+	h := &Handler{gitea: client}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", h.health)
+	mux.HandleFunc("GET /api/v3/user", h.currentUser)
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		writeError(w, http.StatusNotFound, "Not Found")
+	})
+	return mux
+}
+
+func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
+	if err := h.gitea.Healthy(r.Context()); err != nil {
+		writeUpstreamError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// userResponse is GitHub's authenticated-user shape. Nil fields have no Gitea
+// equivalent, or could not be read with the caller's token scopes.
+type userResponse struct {
+	Login             string    `json:"login"`
+	ID                int64     `json:"id"`
+	AvatarURL         string    `json:"avatar_url"`
+	HTMLURL           string    `json:"html_url"`
+	Type              string    `json:"type"`
+	SiteAdmin         bool      `json:"site_admin"`
+	Name              *string   `json:"name"`
+	Blog              *string   `json:"blog"`
+	Location          *string   `json:"location"`
+	Email             *string   `json:"email"`
+	Bio               *string   `json:"bio"`
+	PublicRepos       *int      `json:"public_repos,omitempty"`
+	Followers         int       `json:"followers"`
+	Following         int       `json:"following"`
+	CreatedAt         time.Time `json:"created_at"`
+	TotalPrivateRepos *int      `json:"total_private_repos,omitempty"`
+	OwnedPrivateRepos *int      `json:"owned_private_repos,omitempty"`
+}
+
+func (h *Handler) currentUser(w http.ResponseWriter, r *http.Request) {
+	authorization := r.Header.Get("Authorization")
+	if authorization == "" {
+		writeError(w, http.StatusUnauthorized, "Requires authentication")
+		return
+	}
+
+	user, err := h.gitea.CurrentUser(r.Context(), authorization)
+	if err != nil {
+		writeUpstreamError(w, err)
+		return
+	}
+
+	publicRepos, err := h.optionalRepoCount(r, authorization, user.ID, false)
+	if err != nil {
+		writeUpstreamError(w, err)
+		return
+	}
+	privateRepos, err := h.optionalRepoCount(r, authorization, user.ID, true)
+	if err != nil {
+		writeUpstreamError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, userResponse{
+		Login:             user.Login,
+		ID:                user.ID,
+		AvatarURL:         user.AvatarURL,
+		HTMLURL:           user.HTMLURL,
+		Type:              "User",
+		SiteAdmin:         user.IsAdmin,
+		Name:              nonEmpty(user.FullName),
+		Blog:              nonEmpty(user.Website),
+		Location:          nonEmpty(user.Location),
+		Email:             nonEmpty(user.Email),
+		Bio:               nonEmpty(user.Description),
+		PublicRepos:       publicRepos,
+		Followers:         user.Followers,
+		Following:         user.Following,
+		CreatedAt:         user.Created,
+		TotalPrivateRepos: privateRepos,
+		OwnedPrivateRepos: privateRepos,
+	})
+}
+
+// optionalRepoCount returns nil when the token lacks repository read scope, so
+// a narrowly scoped token can still read its own profile.
+func (h *Handler) optionalRepoCount(r *http.Request, authorization string, uid int64, private bool) (*int, error) {
+	count, err := h.gitea.CountOwnedRepos(r.Context(), authorization, uid, private)
+	if err != nil {
+		var statusErr *gitea.StatusError
+		if errors.As(err, &statusErr) && statusErr.Code == http.StatusForbidden {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &count, nil
+}
+
+func nonEmpty(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}

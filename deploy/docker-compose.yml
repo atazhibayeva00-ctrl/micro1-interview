@@ -1,0 +1,41 @@
+# For parallel worktrees, set unique COMPOSE_PROJECT_NAME, GATEWAY_PORT, and
+# GITEA_PORT values in each worktree's deploy/.env.
+services:
+  gitea:
+    image: docker.gitea.com/gitea:28.4.0@sha256:aa90e8f00b755b0d665214ab9c14447ea44d3190dbe6b6d0cb46cd9c4f55d309
+    environment:
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__server__ROOT_URL: http://localhost:${GITEA_PORT:-3000}/
+      # Keep API URLs public when the gateway calls Gitea by its Docker hostname.
+      GITEA__server__PUBLIC_URL_DETECTION: never
+    ports:
+      - "127.0.0.1:${GITEA_PORT:-3000}:3000"
+    volumes:
+      - gitea-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/healthz"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      GITEA_URL: http://gitea:3000
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-8080}:8080"
+    depends_on:
+      gitea:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  gitea-data:
