@@ -46,19 +46,20 @@ type User struct {
 type Client struct {
 	baseURL string
 	http    *http.Client
+	// stream has no overall timeout. Callers bound downloads with a context.
+	stream *http.Client
 }
 
 // New returns a client for the Gitea instance at baseURL.
 func New(baseURL string) *Client {
+	// Never replay a caller's credentials to a redirect target.
+	noRedirect := func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
-		http: &http.Client{
-			Timeout: 15 * time.Second,
-			// Never replay a caller's credentials to a redirect target.
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		},
+		http:    &http.Client{Timeout: 15 * time.Second, CheckRedirect: noRedirect},
+		stream:  &http.Client{CheckRedirect: noRedirect},
 	}
 }
 

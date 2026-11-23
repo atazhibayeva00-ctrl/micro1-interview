@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,9 @@ import (
 )
 
 const mcpImage = "ghcr.io/github/github-mcp-server:v2.2.0@sha256:040c4e99810076035eb1d9beb4b4a96fcf589c43cefed6ff51a46a553eb4e174"
+
+// finishedTools is the GITHUB_TOOLS allowlist, in the order tools/list returns them.
+var finishedTools = []string{"get_file_contents", "get_me", "list_branches"}
 
 func loadEnv(t *testing.T) map[string]string {
 	t.Helper()
@@ -48,7 +52,7 @@ func connect(t *testing.T, ctx context.Context, env map[string]string, token str
 	cmd := exec.CommandContext(ctx, "docker", "run", "-i", "--rm", "--network", "host",
 		"-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
 		"-e", "GITHUB_HOST=http://127.0.0.1:"+env["GATEWAY_PORT"],
-		"-e", "GITHUB_TOOLS=get_me",
+		"-e", "GITHUB_TOOLS="+strings.Join(finishedTools, ","),
 		mcpImage, "stdio")
 	cmd.Env = append(os.Environ(), "GITHUB_PERSONAL_ACCESS_TOKEN="+token)
 	client := mcp.NewClient(&mcp.Implementation{Name: "conformance", Version: "1"}, nil)
@@ -117,15 +121,47 @@ func TestToolsListMatchesSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 1 || tools.Tools[0].Name != "get_me" {
-		names := make([]string, 0, len(tools.Tools))
-		for _, tool := range tools.Tools {
-			names = append(names, tool.Name)
-		}
-		t.Fatalf("exposed tools = %v, want only get_me", names)
+	names := make([]string, 0, len(tools.Tools))
+	for _, tool := range tools.Tools {
+		names = append(names, tool.Name)
+	}
+	sort.Strings(names)
+	if !reflect.DeepEqual(names, finishedTools) {
+		t.Fatalf("exposed tools = %v, want %v", names, finishedTools)
 	}
 
-	data, err := os.ReadFile(filepath.Join("toolsnaps", "get_me.snap"))
+	for _, tool := range tools.Tools {
+		snapshot := readSnapshot(t, tool.Name)
+		// Upstream stores the list_branches output schema in its own snapshot.
+		if _, err := os.Stat(filepath.Join("toolsnaps", tool.Name+"_output.snap")); err == nil {
+			snapshot["outputSchema"] = readSnapshot(t, tool.Name+"_output")["outputSchema"]
+		}
+		got := toMap(t, tool)
+		stripHeaderAnnotations(got)
+		stripHeaderAnnotations(snapshot)
+		for _, field := range []string{"name", "description", "inputSchema", "outputSchema"} {
+			if !reflect.DeepEqual(got[field], snapshot[field]) {
+				t.Errorf("%s: %s differs from snapshot\n got: %v\nwant: %v", tool.Name, field, got[field], snapshot[field])
+			}
+		}
+	}
+}
+
+// stripHeaderAnnotations removes x-mcp-header, which the server adds to some
+// input schemas at runtime and upstream records in only some snapshots.
+func stripHeaderAnnotations(tool map[string]any) {
+	schema, _ := tool["inputSchema"].(map[string]any)
+	properties, _ := schema["properties"].(map[string]any)
+	for _, property := range properties {
+		if fields, ok := property.(map[string]any); ok {
+			delete(fields, "x-mcp-header")
+		}
+	}
+}
+
+func readSnapshot(t *testing.T, name string) map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("toolsnaps", name+".snap"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,12 +169,7 @@ func TestToolsListMatchesSnapshot(t *testing.T) {
 	if err := json.Unmarshal(data, &snapshot); err != nil {
 		t.Fatal(err)
 	}
-	got := toMap(t, tools.Tools[0])
-	for _, field := range []string{"name", "description", "inputSchema", "outputSchema"} {
-		if !reflect.DeepEqual(got[field], snapshot[field]) {
-			t.Errorf("%s differs from snapshot\n got: %v\nwant: %v", field, got[field], snapshot[field])
-		}
-	}
+	return snapshot
 }
 
 func TestGetMeReturnsGiteaUser(t *testing.T) {

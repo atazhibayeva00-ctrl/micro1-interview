@@ -2,7 +2,7 @@
 
 This file is the source of truth for project plan and context. Read it first when resuming work.
 
-**Current state:** Slice 1 (`get_me`) is built and verified on branch `worktree-slice-1-get-me`. Slice 2 is next and needs its plan written and approved.
+**Current state:** Slices 1 and 2 are built and verified. Slice 1 is merged, and Slice 2 is on branch `worktree-slice-2-read-code`. Slice 3 is next and needs its plan written and approved.
 
 ## Running locally
 ```bash
@@ -17,7 +17,7 @@ CI runs the same script on every push and pull request. Every slice must keep it
 
 ## Parallel worktrees
 - Start each new slice from a branch containing all slices it depends on.
-- Use a unique `COMPOSE_PROJECT_NAME`, `GATEWAY_PORT`, and `GITEA_PORT` in that worktree's gitignored `deploy/.env`. Slice 1 uses `forge-slice-1`, 8080, and 3000.
+- Use a unique `COMPOSE_PROJECT_NAME`, `GATEWAY_PORT`, and `GITEA_PORT` in that worktree's gitignored `deploy/.env`. Slice 1 uses `forge-slice-1`, 8080, and 3000. Slice 2 uses `forge-slice-2`, 8082, and 3002.
 - Each session edits only its own slice's sections of this file and its own ledger rows, to keep merges simple.
 
 ## Goal
@@ -65,7 +65,7 @@ Every slice follows this loop:
 | # | Slice | Tools | Depends on | Status |
 |---|---|---|---|---|
 | 1 | Identity | `get_me` | none | done |
-| 2 | Read code | `get_file_contents`, `list_branches` | 1 | planned |
+| 2 | Read code | `get_file_contents`, `list_branches` | 1 | done |
 | 3 | Write code | `create_branch`, `create_or_update_file` | 2 | planned |
 | 4 | Read issues | `issue_read`, `list_issues` (first GraphQL) | 1 | planned |
 | 5 | Write issues | `issue_write`, `add_issue_comment` | 4 | planned |
@@ -75,7 +75,7 @@ Every slice follows this loop:
 Later backlog: Actions, notifications, projects, gists, discussions, rulesets, security alerts.
 
 ## Current slice
-None. Slice 2 needs a plan and user approval before any build work.
+None. Slice 3 needs a plan and user approval before any build work.
 
 ## Completed slices
 ### Slice 1: `get_me`
@@ -84,6 +84,15 @@ None. Slice 2 needs a plan and user approval before any build work.
 - **Not yet verified:** `.github/workflows/ci.yml` has not run on GitHub Actions or been linted.
 - **Lesson:** Gitea builds URLs from the request host, so `PUBLIC_URL_DETECTION=never` and a fixed `ROOT_URL` are required to avoid leaking `gitea:3000`.
 
+### Slice 2: `get_file_contents`, `list_branches`
+- **Delivered:** Gateway routes for repository info, exact ref lookup, branches, contents, Git trees, and raw downloads, plus a required `PUBLIC_URL` setting, seeded code fixtures, and a second test user. The ledger now has 4 passing rows (3 tools and the `list_branches_output` schema snapshot), 3 out of scope, and 147 pending.
+- **Verified:** `deploy/verify.sh` passed from a clean stack, including all 15 conformance tests for Slices 1 and 2 against the unmodified MCP server and real Gitea.
+- **Not yet verified:** This branch has not run on GitHub Actions. Git LFS files are untested.
+- **Lessons:** Gitea's ref lookup matches by prefix, its trees page at 1000 entries, and its default page limit of 50 is below GitHub's 100. The MCP server adds `x-mcp-header` to some schemas at runtime, so snapshot comparison ignores it.
+
 ## Open questions and known gaps
+- Symlinks return metadata and their target path, but not the target file's content.
+- `git_url` is null in contents responses until a slice adds the Git blobs API.
+- A `raw.<host>` subdomain must stay unconfigured on hosted deployments unless it is served correctly, because the MCP server probes it at startup and switches URLs if it responds.
 - `get_me` has no Gitea source for `updated_at`, `company`, `hireable`, `twitter_username`, or gist counts. They return empty or zero values, and `updated_at` appears as the zero time.
 - The gateway has no `node_id` mapping yet. Add it when a slice needs it.

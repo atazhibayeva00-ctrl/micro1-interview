@@ -21,6 +21,11 @@ func main() {
 		slog.Error("GITEA_URL is required")
 		os.Exit(1)
 	}
+	publicURL := os.Getenv("PUBLIC_URL")
+	if publicURL == "" {
+		slog.Error("PUBLIC_URL is required")
+		os.Exit(1)
+	}
 	addr := os.Getenv("LISTEN_ADDR")
 	if addr == "" {
 		addr = ":8080"
@@ -28,7 +33,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           rest.NewHandler(gitea.New(giteaURL)),
+		Handler:           rest.NewHandler(gitea.New(giteaURL), publicURL),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
