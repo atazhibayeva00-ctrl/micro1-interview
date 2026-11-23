@@ -19,7 +19,7 @@ tools:
   create_gist: pending
   create_issue: pending
   create_or_update_file: partial
-  create_pull_request: pending
+  create_pull_request: passing
   create_pull_request_review: pending
   create_repository: pending
   create_repository_ruleset: pending
@@ -104,7 +104,7 @@ tools:
   projects_get: pending
   projects_list: pending
   projects_write: pending
-  pull_request_read: pending
+  pull_request_read: partial
   pull_request_review_write: pending
   pull_request_review_write_resolution_reason: pending
   push_files: pending

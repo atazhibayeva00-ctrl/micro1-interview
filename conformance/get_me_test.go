@@ -22,7 +22,7 @@ import (
 const mcpImage = "ghcr.io/github/github-mcp-server:v2.2.0@sha256:040c4e99810076035eb1d9beb4b4a96fcf589c43cefed6ff51a46a553eb4e174"
 
 // finishedTools is the GITHUB_TOOLS allowlist, in the order tools/list returns them.
-var finishedTools = []string{"create_branch", "create_or_update_file", "get_file_contents", "get_me", "issue_read", "list_branches", "list_issues"}
+var finishedTools = []string{"create_branch", "create_or_update_file", "create_pull_request", "get_file_contents", "get_me", "issue_read", "list_branches", "list_issues", "pull_request_read"}
 
 func loadEnv(t *testing.T) map[string]string {
 	t.Helper()

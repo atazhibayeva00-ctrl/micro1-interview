@@ -103,6 +103,61 @@ printf 'user = "%s:%s"\n' "$SEED_USER" "$PASSWORD" | compose exec -T gitea curl 
   -d '{"full_name":"Forge Test","description":"Seed user for conformance tests","location":"Test City","website":"https://example.invalid"}' \
   http://localhost:3000/api/v1/user/settings
 
+# Pull request fixtures live in their own repositories, so other slices' counts
+# and branches stay unchanged.
+for spec in pr-fixtures:false pr-private:true; do
+  status="$(writer_api -X POST -d "{\"name\":\"${spec%%:*}\",\"private\":${spec##*:},\"default_branch\":\"main\"}" \
+    http://localhost:3000/api/v1/user/repos)"
+  [[ "$status" == "201" || "$status" == "409" ]] || { echo "failed to create ${spec%%:*}: HTTP $status" >&2; exit 1; }
+done
+
+PULLS="http://localhost:3000/api/v1/repos/$WRITER_USER/pr-fixtures"
+PUSH_GONE_HEAD=0
+[[ "$(writer_api "$PULLS/pulls/1")" == "200" ]] || PUSH_GONE_HEAD=1
+PUSH_GONE_HEAD="$PUSH_GONE_HEAD" SEED_USER="$WRITER_USER" SEED_PASSWORD="$WRITER_PASSWORD" compose exec -T -u git \
+  -e PUSH_GONE_HEAD -e SEED_USER -e SEED_PASSWORD gitea sh -s < "$DEPLOY_DIR/seed_pull_fixtures.sh"
+
+# as_user USER PASSWORD METHOD URL [JSON] prints the response and fails on an error.
+as_user() {
+  local args=(-fsS -K - -X "$3" -H 'Content-Type: application/json')
+  [[ $# -ge 5 ]] && args+=(-d "$5")
+  printf 'user = "%s:%s"\n' "$1" "$2" | compose exec -T gitea curl "${args[@]}" "$4"
+}
+as_writer() { as_user "$WRITER_USER" "$WRITER_PASSWORD" "$@"; }
+as_reviewer() { as_user "$SEED_USER" "$PASSWORD" "$@"; }
+json_field() { python3 -I -c 'import json,sys; print(eval(sys.argv[1], {"d": json.load(sys.stdin)}))' "$1"; }
+
+as_writer PUT "$PULLS/collaborators/$SEED_USER" '{"permission":"write"}' >/dev/null
+as_writer PUT "$PULLS/collaborators/$OTHER_USER" '{"permission":"read"}' >/dev/null
+fork_status="$(printf 'user = "%s:%s"\n' "$OTHER_USER" "$OTHER_PASSWORD" | compose exec -T gitea curl -sS -K - \
+  -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$PULLS/forks")"
+[[ "$fork_status" == "202" || "$fork_status" == "409" ]] || { echo "failed to fork: HTTP $fork_status" >&2; exit 1; }
+
+# Reviews and comments are not idempotent, so they are created once with PR 1.
+if [[ "$PUSH_GONE_HEAD" == "1" ]]; then
+  as_writer POST "$PULLS/pulls" \
+    '{"title":"Fixture review PR","body":"Fixture body","head":"feature/review","base":"main"}' >/dev/null
+  head_sha="$(as_writer GET "$PULLS/pulls/1" | json_field 'd["head"]["sha"]')"
+  as_writer POST "$PULLS/statuses/$head_sha" \
+    '{"context":"ci/build","state":"success","description":"built","target_url":"https://example.invalid/build"}' >/dev/null
+  as_writer POST "$PULLS/statuses/$head_sha" '{"context":"ci/test","state":"pending"}' >/dev/null
+  as_writer POST "$PULLS/statuses/$head_sha" '{"context":"ci/lint","state":"failure"}' >/dev/null
+
+  review_id="$(as_reviewer POST "$PULLS/pulls/1/reviews" '{"event":"COMMENT","body":"Fixture review","comments":[{"path":"feature.txt","new_position":2,"body":"First thread"},{"path":"README.md","new_position":2,"body":"Second thread"}]}' | json_field 'd["id"]')"
+  root_id="$(as_writer GET "$PULLS/pulls/1/reviews/$review_id/comments" | json_field '[c for c in d if c["path"]=="feature.txt"][0]["id"]')"
+  as_writer POST "$PULLS/pulls/1/comments/$root_id/replies" '{"body":"Reply in first thread"}' >/dev/null
+  as_writer POST "$PULLS/pulls/comments/$root_id/resolve" >/dev/null
+  as_reviewer POST "$PULLS/pulls/1/reviews" '{"event":"APPROVED","body":"Looks good"}' >/dev/null
+  as_writer POST "$PULLS/pulls/1/requested_reviewers" "{\"reviewers\":[\"$OTHER_USER\"]}" >/dev/null
+  as_writer POST "$PULLS/issues/1/comments" '{"body":"First general comment"}' >/dev/null
+  as_reviewer POST "$PULLS/issues/1/comments" '{"body":"Second general comment"}' >/dev/null
+
+  as_writer POST "$PULLS/pulls" '{"title":"Deleted head PR","head":"gone-head","base":"main"}' >/dev/null
+  as_writer DELETE "$PULLS/branches/gone-head" >/dev/null
+  as_writer POST "http://localhost:3000/api/v1/repos/$WRITER_USER/pr-private/pulls" \
+    '{"title":"Private PR","head":"private-work","base":"main"}' >/dev/null
+fi
+
 token_valid() {
   [[ -n "$1" ]] && printf 'Authorization: token %s\n' "$1" | \
     compose exec -T gitea curl -fsS -o /dev/null -H @- http://localhost:3000/api/v1/user 2>/dev/null
@@ -124,5 +179,9 @@ ensure_token FORGE_TEST_OTHER_TOKEN seed-other read:user,read:repository,read:is
 ensure_token FORGE_TEST_WRITER_TOKEN seed-writer read:user,write:repository "$WRITER_USER"
 ensure_token FORGE_TEST_WRITER_READONLY_TOKEN seed-writer-ro read:user,read:repository "$WRITER_USER"
 ensure_token FORGE_TEST_OUTSIDER_WRITE_TOKEN seed-outsider read:user,write:repository
+ensure_token FORGE_TEST_PR_TOKEN seed-pr read:user,write:repository,read:issue "$WRITER_USER"
+ensure_token FORGE_TEST_PR_READONLY_TOKEN seed-pr-ro read:user,read:repository,read:issue "$WRITER_USER"
+ensure_token FORGE_TEST_FORK_TOKEN seed-fork read:user,write:repository,read:issue "$OTHER_USER"
+ensure_token FORGE_TEST_PR_OUTSIDER_TOKEN seed-pr-outsider read:user,read:repository,read:issue
 
 echo "Seed complete for user $SEED_USER."
