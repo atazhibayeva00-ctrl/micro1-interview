@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Forge</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <span class="brand">Forge</span>
+    <button id="signout" type="button" hidden>Sign out</button>
+  </header>
+
+  <main id="app">
+    <section id="login" hidden>
+      <h1>Sign in</h1>
+      <p class="hint">Paste a personal access token. It is kept only in this tab and sent to this gateway.</p>
+      <form id="login-form" autocomplete="off">
+        <label for="token">Access token</label>
+        <input id="token" name="token" type="password" required autocomplete="off" spellcheck="false">
+        <button type="submit">Sign in</button>
+      </form>
+      <p id="login-error" class="error" role="alert" hidden></p>
+    </section>
+
+    <section id="profile" hidden>
+      <article class="card">
+        <img id="avatar" alt="" width="96" height="96" hidden>
+        <div class="who">
+          <h1 id="display-name"></h1>
+          <p id="login-name" class="muted"></p>
+          <p id="bio"></p>
+        </div>
+        <dl id="facts"></dl>
+      </article>
+    </section>
+
+    <p id="status" class="muted" role="status" hidden></p>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

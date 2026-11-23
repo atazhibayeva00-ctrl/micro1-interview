@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"micro1-interview/internal/gitea"
+	"micro1-interview/internal/ui"
 )
 
 // Handler serves GitHub-format routes backed by Gitea.
@@ -20,6 +21,7 @@ func NewHandler(client *gitea.Client) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", h.health)
 	mux.HandleFunc("GET /api/v3/user", h.currentUser)
+	mux.Handle("GET "+ui.Prefix, ui.Handler())
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "Not Found")
 	})
