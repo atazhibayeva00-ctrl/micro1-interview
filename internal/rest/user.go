@@ -4,24 +4,44 @@ package rest
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"micro1-interview/internal/gitea"
+	"micro1-interview/internal/graphql"
 	"micro1-interview/internal/ui"
 )
 
 // Handler serves GitHub-format routes backed by Gitea.
 type Handler struct {
-	gitea *gitea.Client
+	gitea     *gitea.Client
+	publicURL string
 }
 
-// NewHandler returns the gateway's HTTP routes.
-func NewHandler(client *gitea.Client) http.Handler {
-	h := &Handler{gitea: client}
+// NewHandler returns the gateway's HTTP routes. publicURL is the address
+// clients use to reach the gateway, and is used in returned links.
+func NewHandler(client *gitea.Client, publicURL string) http.Handler {
+	h := &Handler{gitea: client, publicURL: strings.TrimRight(publicURL, "/")}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", h.health)
 	mux.HandleFunc("GET /api/v3/user", h.currentUser)
 	mux.Handle("GET "+ui.Prefix, ui.Handler())
+	const repoPrefix = "/api/v3/repos/{owner}/{repo}"
+	const repoRoute = "GET " + repoPrefix
+	mux.HandleFunc(repoRoute, h.repository)
+	mux.HandleFunc(repoRoute+"/branches", h.branches)
+	mux.HandleFunc(repoRoute+"/git/ref/{ref...}", h.gitRef)
+	mux.HandleFunc(repoRoute+"/git/trees/{sha}", h.tree)
+	mux.HandleFunc(repoRoute+"/contents", h.contents)
+	mux.HandleFunc(repoRoute+"/contents/{path...}", h.contents)
+	mux.HandleFunc(repoRoute+"/issues/{number}", h.issue)
+	mux.HandleFunc(repoRoute+"/issues/{number}/comments", h.issueComments)
+	mux.HandleFunc(repoRoute+"/issues/{number}/sub_issues", h.subIssues)
+	mux.HandleFunc("GET /raw/{owner}/{repo}/{sha}/{path...}", h.raw)
+	mux.HandleFunc("GET "+repoPrefix+"/git/blobs/{sha}", h.blob)
+	mux.HandleFunc("POST "+repoPrefix+"/git/refs", h.createRef)
+	mux.HandleFunc("PUT "+repoPrefix+"/contents/{path...}", h.putContents)
+	mux.Handle("POST /api/graphql", graphql.NewHandler(client))
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "Not Found")
 	})

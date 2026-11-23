@@ -3,6 +3,7 @@
 package gitea
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,9 +17,11 @@ import (
 
 const maxResponseBytes = 4 << 20
 
-// StatusError reports a non-2xx response from Gitea.
+// StatusError reports a non-2xx response from Gitea. Message is Gitea's own
+// error text. It is for classifying failures and must never reach clients.
 type StatusError struct {
-	Code int
+	Code    int
+	Message string
 }
 
 func (e *StatusError) Error() string {
@@ -46,19 +49,24 @@ type User struct {
 type Client struct {
 	baseURL string
 	http    *http.Client
+	// stream has no overall timeout. Callers bound downloads with a context.
+	stream *http.Client
+	// write sends POST and PUT requests. Go's transport never replays those
+	// methods, and the gateway does not retry them either.
+	write *http.Client
 }
 
 // New returns a client for the Gitea instance at baseURL.
 func New(baseURL string) *Client {
+	// Never replay a caller's credentials to a redirect target.
+	noRedirect := func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
-		http: &http.Client{
-			Timeout: 15 * time.Second,
-			// Never replay a caller's credentials to a redirect target.
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		},
+		http:    &http.Client{Timeout: 15 * time.Second, CheckRedirect: noRedirect},
+		stream:  &http.Client{CheckRedirect: noRedirect},
+		write:   &http.Client{Timeout: 55 * time.Second, CheckRedirect: noRedirect},
 	}
 }
 
@@ -113,20 +121,47 @@ func (c *Client) CountOwnedRepos(ctx context.Context, authorization string, uid 
 }
 
 func (c *Client) do(ctx context.Context, authorization, path string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	return c.send(ctx, c.http, http.MethodGet, authorization, path, nil)
+}
+
+// send issues one request. A non-nil body is sent as JSON.
+func (c *Client) send(ctx context.Context, client *http.Client, method, authorization, path string, body []byte) (*http.Response, error) {
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reader)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	if authorization != "" {
 		req.Header.Set("Authorization", authorization)
 	}
-	return c.http.Do(req)
+	return client.Do(req)
 }
 
 func checkStatus(resp *http.Response) error {
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return &StatusError{Code: resp.StatusCode}
+	if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
+		return nil
 	}
-	return nil
+	return &StatusError{Code: resp.StatusCode, Message: readErrorMessage(resp.Body)}
+}
+
+// readErrorMessage extracts Gitea's error text from a small JSON body.
+func readErrorMessage(body io.Reader) string {
+	raw, err := io.ReadAll(io.LimitReader(body, 4096))
+	if err != nil {
+		return ""
+	}
+	var parsed struct {
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(raw, &parsed) != nil {
+		return ""
+	}
+	return parsed.Message
 }

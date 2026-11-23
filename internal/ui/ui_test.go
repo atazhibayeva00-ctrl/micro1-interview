@@ -18,7 +18,7 @@ func newServer(t *testing.T) *httptest.Server {
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(upstream.Close)
-	srv := httptest.NewServer(rest.NewHandler(gitea.New(upstream.URL)))
+	srv := httptest.NewServer(rest.NewHandler(gitea.New(upstream.URL), "http://gateway.test"))
 	t.Cleanup(srv.Close)
 	return srv
 }

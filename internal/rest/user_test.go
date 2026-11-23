@@ -81,7 +81,7 @@ func startGateway(t *testing.T, fake *fakeGitea) *httptest.Server {
 	t.Helper()
 	upstream := httptest.NewServer(fake)
 	t.Cleanup(upstream.Close)
-	gateway := httptest.NewServer(NewHandler(gitea.New(upstream.URL)))
+	gateway := httptest.NewServer(NewHandler(gitea.New(upstream.URL), "http://gateway.test"))
 	t.Cleanup(gateway.Close)
 	return gateway
 }
@@ -244,7 +244,7 @@ func TestGiteaUnreachable(t *testing.T) {
 	upstream := httptest.NewServer(http.NotFoundHandler())
 	address := upstream.URL
 	upstream.Close()
-	gateway := httptest.NewServer(NewHandler(gitea.New(address)))
+	gateway := httptest.NewServer(NewHandler(gitea.New(address), "http://gateway.test"))
 	t.Cleanup(gateway.Close)
 
 	for _, path := range []string{"/api/v3/user", "/healthz"} {
