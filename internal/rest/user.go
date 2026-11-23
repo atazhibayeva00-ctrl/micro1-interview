@@ -9,6 +9,7 @@ import (
 
 	"micro1-interview/internal/gitea"
 	"micro1-interview/internal/graphql"
+	"micro1-interview/internal/ui"
 )
 
 // Handler serves GitHub-format routes backed by Gitea.
@@ -24,6 +25,7 @@ func NewHandler(client *gitea.Client, publicURL string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", h.health)
 	mux.HandleFunc("GET /api/v3/user", h.currentUser)
+	mux.Handle("GET "+ui.Prefix, ui.Handler())
 	const repoPrefix = "/api/v3/repos/{owner}/{repo}"
 	const repoRoute = "GET " + repoPrefix
 	mux.HandleFunc(repoRoute, h.repository)

@@ -26,6 +26,15 @@ compose down -v --remove-orphans
 sed -i '/^FORGE_TEST_/d' "$ENV_FILE"
 compose up -d --build --wait
 
+gateway_port="$(sed -n 's/^GATEWAY_PORT=//p' "$ENV_FILE" | tail -n 1)"
+gateway_url="http://127.0.0.1:${gateway_port:-8080}"
+ui_headers="$(curl -fsS -D - -o /dev/null "$gateway_url/ui/")"
+if ! grep -qi '^content-security-policy: default-src .self.' <<<"$ui_headers"; then
+  echo "The /ui/ page is missing its Content-Security-Policy header." >&2
+  exit 1
+fi
+curl -fsS -o /dev/null "$gateway_url/ui/app.js"
+
 ./deploy/seed.sh
 before="$(grep '^FORGE_TEST_' "$ENV_FILE" | sort | sha256sum)"
 ./deploy/seed.sh
