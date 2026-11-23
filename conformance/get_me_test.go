@@ -22,7 +22,7 @@ import (
 const mcpImage = "ghcr.io/github/github-mcp-server:v2.2.0@sha256:040c4e99810076035eb1d9beb4b4a96fcf589c43cefed6ff51a46a553eb4e174"
 
 // finishedTools is the GITHUB_TOOLS allowlist, in the order tools/list returns them.
-var finishedTools = []string{"create_branch", "create_or_update_file", "get_file_contents", "get_me", "list_branches"}
+var finishedTools = []string{"create_branch", "create_or_update_file", "get_file_contents", "get_me", "issue_read", "list_branches", "list_issues"}
 
 func loadEnv(t *testing.T) map[string]string {
 	t.Helper()
@@ -132,7 +132,7 @@ func TestToolsListMatchesSnapshot(t *testing.T) {
 
 	for _, tool := range tools.Tools {
 		snapshot := readSnapshot(t, tool.Name)
-		// Upstream stores the list_branches output schema in its own snapshot.
+		// Upstream stores some output schemas in their own snapshot.
 		if _, err := os.Stat(filepath.Join("toolsnaps", tool.Name+"_output.snap")); err == nil {
 			snapshot["outputSchema"] = readSnapshot(t, tool.Name+"_output")["outputSchema"]
 		}

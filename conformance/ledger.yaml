@@ -65,7 +65,7 @@ tools:
   issue_artifact_write_ff_issue_artifacts: pending
   issue_dependency_read_ff_issue_dependencies: pending
   issue_dependency_write_ff_issue_dependencies: pending
-  issue_read: pending
+  issue_read: partial
   issue_write: pending
   label_write: pending
   list_automation_revisions: pending
@@ -83,8 +83,8 @@ tools:
   list_global_security_advisories: pending
   list_issue_fields: pending
   list_issue_types: pending
-  list_issues: pending
-  list_issues_output: pending
+  list_issues: partial
+  list_issues_output: passing
   list_label: pending
   list_notifications: pending
   list_org_repository_security_advisories: pending

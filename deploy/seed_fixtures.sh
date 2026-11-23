@@ -72,3 +72,51 @@ printf 'private secret\n' > secret.txt
 git add -A
 git commit -q -m "Add private fixture"
 push seed-private
+
+# api METHOD REPO PATH [JSON] calls Gitea without putting credentials in argv.
+api() {
+  if [ "$#" -ge 4 ]; then
+    printf 'user = "%s:%s"\n' "$SEED_USER" "$SEED_PASSWORD" | curl -fsS -K - -o /dev/null -X "$1" \
+      -H 'Content-Type: application/json' -d "$4" "http://localhost:3000/api/v1/repos/$SEED_USER/$2$3"
+  else
+    printf 'user = "%s:%s"\n' "$SEED_USER" "$SEED_PASSWORD" | curl -fsS -K - -X "$1" \
+      "http://localhost:3000/api/v1/repos/$SEED_USER/$2$3"
+  fi
+}
+
+ensure_label() {
+  if ! api GET "$1" /labels | grep -q "\"name\":\"$2\""; then
+    api POST "$1" /labels "{\"name\":\"$2\",\"color\":\"$3\",\"description\":\"$4\"}"
+  fi
+}
+
+issue_exists() { api GET "$1" "/issues/$2" >/dev/null 2>&1; }
+
+# ensure_issue REPO NUMBER TITLE keeps issue numbers stable across reseeds.
+ensure_issue() {
+  if issue_exists "$1" "$2"; then
+    return 1
+  fi
+  api POST "$1" /issues "{\"title\":\"$3\",\"body\":\"Body of issue $2\",\"assignees\":[\"$SEED_USER\"]}"
+}
+
+ensure_label seed-public bug d73a4a "Something is broken"
+ensure_label seed-public enhancement a2eeef "New feature"
+
+if ensure_issue seed-public 1 "First open issue"; then
+  api POST seed-public /issues/1/labels '{"labels":["bug","enhancement"]}'
+  for comment in one two three; do
+    api POST seed-public /issues/1/comments "{\"body\":\"Comment $comment\"}"
+  done
+fi
+if ensure_issue seed-public 2 "Closed issue"; then
+  api POST seed-public /issues/2/labels '{"labels":["enhancement"]}'
+  api PATCH seed-public /issues/2 '{"state":"closed"}'
+fi
+ensure_issue seed-public 3 "Third issue" || true
+if ! issue_exists seed-public 4; then
+  api POST seed-public /pulls '{"head":"feature/login","base":"main","title":"Fixture pull request"}'
+fi
+ensure_issue seed-public 5 "Fifth issue" || true
+ensure_issue seed-public 6 "Sixth issue" || true
+ensure_issue seed-private 1 "Private issue" || true

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"micro1-interview/internal/gitea"
+	"micro1-interview/internal/graphql"
 )
 
 // Handler serves GitHub-format routes backed by Gitea.
@@ -31,10 +32,14 @@ func NewHandler(client *gitea.Client, publicURL string) http.Handler {
 	mux.HandleFunc(repoRoute+"/git/trees/{sha}", h.tree)
 	mux.HandleFunc(repoRoute+"/contents", h.contents)
 	mux.HandleFunc(repoRoute+"/contents/{path...}", h.contents)
+	mux.HandleFunc(repoRoute+"/issues/{number}", h.issue)
+	mux.HandleFunc(repoRoute+"/issues/{number}/comments", h.issueComments)
+	mux.HandleFunc(repoRoute+"/issues/{number}/sub_issues", h.subIssues)
 	mux.HandleFunc("GET /raw/{owner}/{repo}/{sha}/{path...}", h.raw)
 	mux.HandleFunc("GET "+repoPrefix+"/git/blobs/{sha}", h.blob)
 	mux.HandleFunc("POST "+repoPrefix+"/git/refs", h.createRef)
 	mux.HandleFunc("PUT "+repoPrefix+"/contents/{path...}", h.putContents)
+	mux.Handle("POST /api/graphql", graphql.NewHandler(client))
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "Not Found")
 	})
