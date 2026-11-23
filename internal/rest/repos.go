@@ -15,9 +15,8 @@ const (
 	maxPerPage     = 100
 )
 
-// validSegment rejects names that could change which Gitea route is called.
 func validSegment(segment string) bool {
-	return segment != "" && segment != "." && segment != ".." && !strings.ContainsAny(segment, "/\\")
+	return gitea.ValidSegment(segment)
 }
 
 // validPath reports whether every segment of a slash-separated path is safe.

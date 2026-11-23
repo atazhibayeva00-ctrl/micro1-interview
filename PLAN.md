@@ -17,7 +17,7 @@ CI runs the same script on every push and pull request. Every slice must keep it
 
 ## Parallel worktrees
 - Start each new slice from a branch containing all slices it depends on.
-- Use a unique `COMPOSE_PROJECT_NAME`, `GATEWAY_PORT`, and `GITEA_PORT` in that worktree's gitignored `deploy/.env`. Slice 1 uses `forge-slice-1`, 8080, and 3000. Slice 2 uses `forge-slice-2`, 8082, and 3002. Slice 3 uses `forge-slice-3`, 8100, and 3020.
+- Use a unique `COMPOSE_PROJECT_NAME`, `GATEWAY_PORT`, and `GITEA_PORT` in that worktree's gitignored `deploy/.env`. Slice 1 uses `forge-slice-1`, 8080, and 3000. Slice 2 uses `forge-slice-2`, 8082, and 3002. Slice 3 uses `forge-slice-3`, 8100, and 3020. Slice 4 uses `forge-slice-4`, 8084, and 3004.
 - Each session edits only its own slice's sections of this file and its own ledger rows, to keep merges simple.
 
 ## Goal
@@ -67,7 +67,7 @@ Every slice follows this loop:
 | 1 | Identity | `get_me` | none | done |
 | 2 | Read code | `get_file_contents`, `list_branches` | 1 | done |
 | 3 | Write code | `create_branch`, `create_or_update_file` (partial) | 2 | done, not yet merged |
-| 4 | Read issues | `issue_read`, `list_issues` (first GraphQL) | 1 | planned |
+| 4 | Read issues | `issue_read`, `list_issues` (first GraphQL) | 1 | core done, follow-up planned |
 | 5 | Write issues | `issue_write`, `add_issue_comment` | 4 | planned |
 | 6 | Pull requests | `create_pull_request`, `pull_request_read` | 3, 4 | planned |
 | 7 | Review and merge | `pull_request_review_write`, `merge_pull_request` | 6 | planned |
@@ -75,7 +75,7 @@ Every slice follows this loop:
 Later backlog: Actions, notifications, projects, gists, discussions, rulesets, security alerts.
 
 ## Current slice
-None. Slice 4 needs a plan and user approval before any build work.
+None. Slice 4 core is in review. Its follow-up and Slice 5 need plans and user approval.
 
 ## Completed slices
 ### Slice 1: `get_me`
@@ -96,11 +96,24 @@ None. Slice 4 needs a plan and user approval before any build work.
 - **Not yet verified:** This branch has not run on GitHub Actions.
 - **Lessons:** Gitea returns a bare 500 for an unknown source commit, reports a stale SHA as a 422 identified only by its message text, and ignores the raw media type on blobs. A conformance test guards the stale-SHA wording against Gitea upgrades.
 
+### Slice 4 core: `issue_read`, `list_issues`
+- **Delivered:** `issue_read` methods `get`, `get_comments`, and `get_labels`, plus `list_issues` with state filtering and cursor pagination, newest first. Adds the first GraphQL endpoint at `POST /api/graphql`, with query size, depth, and selection limits. The ledger has 6 passing rows, 3 partial (`create_or_update_file`, `issue_read`, `list_issues`), 3 out of scope, and 142 pending.
+- **Verified:** `deploy/verify.sh` passed from a clean stack, including all 24 conformance tests for Slices 1, 2, and 4 against the unmodified MCP server and real Gitea.
+- **Not yet verified:** This branch has not run on GitHub Actions.
+- **Lessons:** Gitea returns all comments without paging, lists pull requests as issues unless told not to, and only sorts by newest. For labels, GitHub GraphQL matches any listed label and ignores case, while Gitea requires all labels and ignores unknown names.
+
+### Slice 4 follow-up (planned, needs approval)
+- `list_issues`: `labels`, `since`, and `orderBy`/`direction` other than newest first. These return a clear error today.
+- `issue_read`: `get_sub_issues` and `get_parent`. These return a clear error today, and Gitea has no sub-issue model.
+- `field_filters` and custom issue fields, which have no Gitea equivalent.
+
 ## Open questions and known gaps
 - `create_or_update_file` with `allow_symlink_write=true` returns a clear "not supported" error and changes nothing, because Gitea's API cannot retarget a symlink. Closing this needs a Git-level write path.
 - File writes ignore client-supplied `author` and `committer`, so commits are attributed to the authenticated user.
 - A branch literally named like a 40-character SHA could be ambiguous as a `create_branch` source in Gitea. This case is untested.
 - Blobs too large for the gateway's 32 MiB Gitea response cap return 502.
+- `list_issues` reads all matching issues on each request and returns an error above 10,000.
+- GitHub's `state_reason` and closing pull request references are not available for issues.
 - Symlinks return metadata and their target path, but not the target file's content.
 - `git_url` is still null in contents responses, although the Git blobs route now exists.
 - A `raw.<host>` subdomain must stay unconfigured on hosted deployments unless it is served correctly, because the MCP server probes it at startup and switches URLs if it responds.

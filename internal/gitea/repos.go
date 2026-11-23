@@ -87,6 +87,11 @@ type Tree struct {
 	Truncated bool
 }
 
+// ValidSegment rejects names that could change which Gitea route is called.
+func ValidSegment(segment string) bool {
+	return segment != "" && segment != "." && segment != ".." && !strings.ContainsAny(segment, "/\\")
+}
+
 // EscapePath escapes each segment of a slash-separated path.
 func EscapePath(path string) string {
 	segments := strings.Split(path, "/")

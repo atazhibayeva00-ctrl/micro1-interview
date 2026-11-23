@@ -118,9 +118,9 @@ ensure_token() {
     env_set "$1" "$token"
   fi
 }
-ensure_token FORGE_TEST_TOKEN seed-full read:user,read:repository
+ensure_token FORGE_TEST_TOKEN seed-full read:user,read:repository,read:issue
 ensure_token FORGE_TEST_NARROW_TOKEN seed-narrow read:user
-ensure_token FORGE_TEST_OTHER_TOKEN seed-other read:user,read:repository "$OTHER_USER"
+ensure_token FORGE_TEST_OTHER_TOKEN seed-other read:user,read:repository,read:issue "$OTHER_USER"
 ensure_token FORGE_TEST_WRITER_TOKEN seed-writer read:user,write:repository "$WRITER_USER"
 ensure_token FORGE_TEST_WRITER_READONLY_TOKEN seed-writer-ro read:user,read:repository "$WRITER_USER"
 ensure_token FORGE_TEST_OUTSIDER_WRITE_TOKEN seed-outsider read:user,write:repository
