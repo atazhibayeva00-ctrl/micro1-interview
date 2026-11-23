@@ -31,6 +31,7 @@ type Query {
 
 type Repository {
 	isPrivate: Boolean!
+	pullRequest(number: Int!): PullRequest
 	issue(number: Int!): Issue
 	issues(
 		first: Int
@@ -95,5 +96,42 @@ type LabelConnection {
 
 type IssueCommentConnection {
 	totalCount: Int!
+}
+
+type PullRequest {
+	reviewThreads(first: Int!, after: String): PullRequestReviewThreadConnection!
+}
+
+type PullRequestReviewThreadConnection {
+	nodes: [PullRequestReviewThread!]!
+	pageInfo: PageInfo!
+	totalCount: Int!
+}
+
+type PullRequestReviewThread {
+	id: ID!
+	isResolved: Boolean!
+	isOutdated: Boolean!
+	isCollapsed: Boolean!
+	comments(first: Int!): PullRequestReviewCommentConnection!
+}
+
+type PullRequestReviewCommentConnection {
+	nodes: [PullRequestReviewComment!]!
+	totalCount: Int!
+}
+
+type PullRequestReviewComment {
+	id: ID!
+	body: String!
+	path: String!
+	line: Int
+	originalLine: Int
+	startLine: Int
+	originalStartLine: Int
+	author: Actor
+	createdAt: DateTime!
+	updatedAt: DateTime!
+	url: String!
 }
 `

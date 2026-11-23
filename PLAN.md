@@ -2,7 +2,7 @@
 
 This file is the source of truth for project plan and context. Read it first when resuming work.
 
-**Current state:** Slices 1 and 2 are merged into `main`. Slice 3 is built and verified locally on branch `slice-3-write-code`, with one known gap for symlink updates. Slice 4 is next and needs its plan written and approved.
+**Current state:** Slices 1 to 4 are merged into `main`. Slice 6 is built and verified locally on branch `slice-6-pull-requests`, and is not yet committed. Slice 5 was deferred at the user's request and still needs a plan, as do Slice 7 and the Slice 4 follow-up.
 
 ## Running locally
 ```bash
@@ -17,7 +17,7 @@ CI runs the same script on every push and pull request. Every slice must keep it
 
 ## Parallel worktrees
 - Start each new slice from a branch containing all slices it depends on.
-- Use a unique `COMPOSE_PROJECT_NAME`, `GATEWAY_PORT`, and `GITEA_PORT` in that worktree's gitignored `deploy/.env`. Slice 1 uses `forge-slice-1`, 8080, and 3000. Slice 2 uses `forge-slice-2`, 8082, and 3002. Slice 3 uses `forge-slice-3`, 8100, and 3020. Slice 4 uses `forge-slice-4`, 8084, and 3004.
+- Use a unique `COMPOSE_PROJECT_NAME`, `GATEWAY_PORT`, and `GITEA_PORT` in that worktree's gitignored `deploy/.env`. Slice 1 uses `forge-slice-1`, 8080, and 3000. Slice 2 uses `forge-slice-2`, 8082, and 3002. Slice 3 uses `forge-slice-3`, 8100, and 3020. Slice 4 uses `forge-slice-4`, 8084, and 3004. Slice 6 uses `forge-slice-6`, 8120, and 3040.
 - Each session edits only its own slice's sections of this file and its own ledger rows, to keep merges simple.
 
 ## Goal
@@ -60,22 +60,23 @@ Every slice follows this loop:
 | Build in vertical slices | Each feature is usable and verified before the next begins. |
 | User approves each slice plan | The user controls scope and order at every step. |
 | Copilot and GitHub-proprietary tools are out of scope | They depend on GitHub-hosted services. |
+| Build Slice 6 before Slice 5 | The user chose this order. Pull request tools do not depend on issue writes. |
 
 ## Roadmap
 | # | Slice | Tools | Depends on | Status |
 |---|---|---|---|---|
 | 1 | Identity | `get_me` | none | done |
 | 2 | Read code | `get_file_contents`, `list_branches` | 1 | done |
-| 3 | Write code | `create_branch`, `create_or_update_file` (partial) | 2 | done, not yet merged |
+| 3 | Write code | `create_branch`, `create_or_update_file` (partial) | 2 | done |
 | 4 | Read issues | `issue_read`, `list_issues` (first GraphQL) | 1 | core done, follow-up planned |
-| 5 | Write issues | `issue_write`, `add_issue_comment` | 4 | planned |
-| 6 | Pull requests | `create_pull_request`, `pull_request_read` | 3, 4 | planned |
+| 5 | Write issues | `issue_write`, `add_issue_comment` | 4 | planned, deferred until after Slice 6 |
+| 6 | Pull requests | `create_pull_request`, `pull_request_read` (partial) | 3, 4 | done, not yet merged |
 | 7 | Review and merge | `pull_request_review_write`, `merge_pull_request` | 6 | planned |
 
 Later backlog: Actions, notifications, projects, gists, discussions, rulesets, security alerts.
 
 ## Current slice
-None. Slice 4 core is in review. Its follow-up and Slice 5 need plans and user approval.
+None. Slice 6 is awaiting review. Slice 5, Slice 7, and the Slice 4 follow-up need plans and user approval.
 
 ## Completed slices
 ### Slice 1: `get_me`
@@ -107,7 +108,20 @@ None. Slice 4 core is in review. Its follow-up and Slice 5 need plans and user a
 - `issue_read`: `get_sub_issues` and `get_parent`. These return a clear error today, and Gitea has no sub-issue model.
 - `field_filters` and custom issue fields, which have no Gitea equivalent.
 
+### Slice 6: `create_pull_request`, `pull_request_read`
+- **Delivered:** Pull request creation with drafts, reviewers, and fork heads, plus all nine `pull_request_read` methods. Adds REST routes for pull requests, files, commits, reviews, commit status, and check runs, and GraphQL review threads. The ledger now has 7 passing rows, 4 partial, 3 out of scope, and 140 pending.
+- **Verified:** `deploy/verify.sh` passed from a clean stack, with 23 gateway test functions and 36 conformance test functions against the unmodified MCP server and real Gitea. Coverage includes a full agent workflow from branch to commit to pull request to reads.
+- **Not yet verified:** This branch has not run on GitHub Actions.
+- **Lessons:** Gitea opens pull requests with no commits, marks drafts only through a title prefix, keeps users in `requested_reviewers` after they review, calls modified files `changed`, and closes a pull request when its head branch is deleted.
+
 ## Open questions and known gaps
+- `pull_request_read` is partial. `get_files` has no per-file `patch`, so agents should use `get_diff`.
+- `get_check_runs` is derived from commit statuses, because Gitea has no check runs API. Annotations and other check-only fields are unavailable.
+- Mergeability reports `unknown` when Gitea says a pull request is not mergeable, because that value also means the check has not finished. Real conflicts therefore are not reported as `dirty`.
+- Review threads are inferred from review, path, and position, because Gitea's API has no thread ID. Separate comments on the same line of one review merge into one thread.
+- A non-draft pull request titled with `WIP:` or `[WIP]` becomes a draft in Gitea, and the prefix is removed from its displayed title.
+- If requesting reviewers fails after a pull request is created, the tool reports an error but the pull request remains open.
+- Diffs above 10 MiB return 406.
 - `create_or_update_file` with `allow_symlink_write=true` returns a clear "not supported" error and changes nothing, because Gitea's API cannot retarget a symlink. Closing this needs a Git-level write path.
 - File writes ignore client-supplied `author` and `committer`, so commits are attributed to the authenticated user.
 - A branch literally named like a 40-character SHA could be ambiguous as a `create_branch` source in Gitea. This case is untested.
