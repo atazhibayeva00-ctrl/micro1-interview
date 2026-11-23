@@ -15,10 +15,10 @@ tools:
   assign_copilot_to_issue: out_of_scope
   assign_copilot_to_issue_with_intent: out_of_scope
   create_automation: pending
-  create_branch: pending
+  create_branch: passing
   create_gist: pending
   create_issue: pending
-  create_or_update_file: pending
+  create_or_update_file: partial
   create_pull_request: pending
   create_pull_request_review: pending
   create_repository: pending
