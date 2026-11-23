@@ -43,7 +43,7 @@ tools:
   get_discussion: pending
   get_discussion_comments: pending
   get_file_blame: pending
-  get_file_contents: pending
+  get_file_contents: passing
   get_gist: pending
   get_global_security_advisory: pending
   get_job_logs: pending
@@ -72,8 +72,8 @@ tools:
   list_automations: pending
   list_available_automation_tools: pending
   list_available_automation_triggers: pending
-  list_branches: pending
-  list_branches_output: pending
+  list_branches: passing
+  list_branches_output: passing
   list_code_scanning_alerts: pending
   list_commits: pending
   list_dependabot_alerts: pending

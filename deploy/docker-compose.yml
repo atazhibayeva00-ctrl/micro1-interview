@@ -10,6 +10,8 @@ services:
       GITEA__server__ROOT_URL: http://localhost:${GITEA_PORT:-3000}/
       # Keep API URLs public when the gateway calls Gitea by its Docker hostname.
       GITEA__server__PUBLIC_URL_DETECTION: never
+      # GitHub allows 100 items per page. Gitea's default of 50 would shrink pages.
+      GITEA__api__MAX_RESPONSE_ITEMS: "100"
     ports:
       - "127.0.0.1:${GITEA_PORT:-3000}:3000"
     volumes:
@@ -26,6 +28,7 @@ services:
       dockerfile: deploy/Dockerfile
     environment:
       GITEA_URL: http://gitea:3000
+      PUBLIC_URL: http://127.0.0.1:${GATEWAY_PORT:-8080}
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-8080}:8080"
     depends_on:

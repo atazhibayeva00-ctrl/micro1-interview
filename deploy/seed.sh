@@ -7,6 +7,7 @@ DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$DEPLOY_DIR/.env"
 SEED_USER="forge-test"
 SEED_EMAIL="forge-test@example.invalid"
+OTHER_USER="forge-other"
 
 touch "$ENV_FILE"
 
@@ -43,6 +44,28 @@ create_repo() {
 create_repo seed-public false
 create_repo seed-private true
 
+SEED_USER="$SEED_USER" SEED_PASSWORD="$PASSWORD" compose exec -T -u git \
+  -e SEED_USER -e SEED_PASSWORD gitea sh -s < "$DEPLOY_DIR/seed_fixtures.sh"
+
+set_default_branch() {
+  printf 'user = "%s:%s"\n' "$SEED_USER" "$PASSWORD" | compose exec -T gitea curl -fsS -K - \
+    -o /dev/null -X PATCH -H 'Content-Type: application/json' \
+    -d "{\"default_branch\":\"$2\"}" "http://localhost:3000/api/v1/repos/$SEED_USER/$1"
+}
+set_default_branch seed-public main
+set_default_branch seed-private trunk
+
+# A second user proves that private repositories stay hidden from non-collaborators.
+OTHER_PASSWORD="$(env_get FORGE_TEST_OTHER_PASSWORD)"
+if [[ -z "$OTHER_PASSWORD" ]]; then
+  OTHER_PASSWORD="$(openssl rand -hex 24)"
+  env_set FORGE_TEST_OTHER_PASSWORD "$OTHER_PASSWORD"
+fi
+if ! gitea_cli admin user list | awk '{print $2}' | grep -qx "$OTHER_USER"; then
+  gitea_cli admin user create --username "$OTHER_USER" --email "$OTHER_USER@example.invalid" \
+    --password "$OTHER_PASSWORD" --must-change-password=false >/dev/null
+fi
+
 printf 'user = "%s:%s"\n' "$SEED_USER" "$PASSWORD" | compose exec -T gitea curl -fsS -K - \
   -o /dev/null -X PATCH -H 'Content-Type: application/json' \
   -d '{"full_name":"Forge Test","description":"Seed user for conformance tests","location":"Test City","website":"https://example.invalid"}' \
@@ -53,17 +76,18 @@ token_valid() {
     compose exec -T gitea curl -fsS -o /dev/null -H @- http://localhost:3000/api/v1/user 2>/dev/null
 }
 
-# ensure_token ENV_KEY NAME_PREFIX SCOPES keeps a working token or creates one.
+# ensure_token ENV_KEY NAME_PREFIX SCOPES [USER] keeps a working token or creates one.
 ensure_token() {
   local token
   token="$(env_get "$1")"
   if ! token_valid "$token"; then
-    token="$(gitea_cli admin user generate-access-token --username "$SEED_USER" \
+    token="$(gitea_cli admin user generate-access-token --username "${4:-$SEED_USER}" \
       --token-name "$2-$(date +%s)" --scopes "$3" --raw | tr -d '\r\n')"
     env_set "$1" "$token"
   fi
 }
 ensure_token FORGE_TEST_TOKEN seed-full read:user,read:repository
 ensure_token FORGE_TEST_NARROW_TOKEN seed-narrow read:user
+ensure_token FORGE_TEST_OTHER_TOKEN seed-other read:user,read:repository "$OTHER_USER"
 
 echo "Seed complete for user $SEED_USER."

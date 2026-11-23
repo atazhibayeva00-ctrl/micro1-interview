@@ -4,6 +4,7 @@ package rest
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"micro1-interview/internal/gitea"
@@ -11,15 +12,25 @@ import (
 
 // Handler serves GitHub-format routes backed by Gitea.
 type Handler struct {
-	gitea *gitea.Client
+	gitea     *gitea.Client
+	publicURL string
 }
 
-// NewHandler returns the gateway's HTTP routes.
-func NewHandler(client *gitea.Client) http.Handler {
-	h := &Handler{gitea: client}
+// NewHandler returns the gateway's HTTP routes. publicURL is the address
+// clients use to reach the gateway, and is used in returned links.
+func NewHandler(client *gitea.Client, publicURL string) http.Handler {
+	h := &Handler{gitea: client, publicURL: strings.TrimRight(publicURL, "/")}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", h.health)
 	mux.HandleFunc("GET /api/v3/user", h.currentUser)
+	const repoRoute = "GET /api/v3/repos/{owner}/{repo}"
+	mux.HandleFunc(repoRoute, h.repository)
+	mux.HandleFunc(repoRoute+"/branches", h.branches)
+	mux.HandleFunc(repoRoute+"/git/ref/{ref...}", h.gitRef)
+	mux.HandleFunc(repoRoute+"/git/trees/{sha}", h.tree)
+	mux.HandleFunc(repoRoute+"/contents", h.contents)
+	mux.HandleFunc(repoRoute+"/contents/{path...}", h.contents)
+	mux.HandleFunc("GET /raw/{owner}/{repo}/{sha}/{path...}", h.raw)
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "Not Found")
 	})
